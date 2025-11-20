@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>임진왜란 디펜스: 최종장</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Noto+Sans+KR:wght@400;700&display=swap');
+        
+        body { 
+            font-family: 'Noto Sans KR', sans-serif; 
+            background-color: #1a1a1a; 
+            color: #fff; 
+            text-align: center; 
+            margin: 0; 
+            user-select: none;
+            overflow: hidden;
+            touch-action: manipulation;
+        }
+
+        /* 가로 모드 안내 */
+        #rotate-msg {
+            display: none;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.95); z-index: 9999;
+            flex-direction: column; justify-content: center; align-items: center;
+            font-size: 24px; font-weight: bold; color: #f1c40f;
+        }
+        @media (orientation: portrait) { #rotate-msg { display: flex; } }
+
+        h1 { 
+            font-family: 'Black Han Sans', sans-serif; 
+            color: #f1c40f; 
+            margin: 5px 0; 
+            text-shadow: 2px 2px 0 #000; 
+            font-size: 22px; 
+        }
+        
+        /* 게임 화면 */
+        #game-wrapper {
+            position: relative;
+            width: 100%; max-width: 1000px;
+            aspect-ratio: 1000 / 400;
+            margin: 0 auto;
+            border: 3px solid #555;
+            background: #4e342e;
+            box-shadow: 0 0 15px rgba(0,0,0,0.5);
+        }
+        canvas { display: block; width: 100%; height: 100%; }
+        
+        /* UI 요소 */
+        .hp-bar-container { position: absolute; bottom: 10px; width: 35%; height: 15px; background: #222; border: 1px solid #fff; z-index: 5; }
+        #korea-hp-con { left: 10px; }
+        #japan-hp-con { right: 10px; }
+        .hp-bar { height: 100%; transition: width 0.2s; }
+        #korea-hp { background: #3498db; width: 100%; }
+        #japan-hp { background: #e74c3c; width: 100%; }
+        
+        .base-label { position: absolute; bottom: 30px; font-weight: bold; font-size: 14px; text-shadow: 1px 1px 2px #000; z-index: 5; }
+        
+        #timer-box {
+            position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.7); padding: 5px 15px; border-radius: 15px;
+            font-size: 18px; font-weight: bold; border: 1px solid #fff;
+        }
+
+        /* 컨트롤 패널 */
+        #control-panel { 
+            width: 100%; max-width: 1000px; 
+            margin: 0 auto; background: #2c3e50; padding: 5px; 
+            box-sizing: border-box; display: flex; flex-direction: column; gap: 5px;
+        }
+        
+        .top-info { display: flex; justify-content: space-between; align-items: center; padding: 0 10px; }
+        .resource { color: #f1c40f; font-size: 16px; font-weight: bold; }
+        .pop-count { color: #fff; font-size: 14px; font-weight: bold; margin-left: 10px; }
+        
+        .mode-select { display: flex; gap: 10px; }
+        .mode-btn { 
+            padding: 5px 15px; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; font-size: 13px; opacity: 0.5; transition: 0.2s;
+        }
+        .mode-btn.active { opacity: 1; transform: scale(1.05); box-shadow: 0 0 5px white; }
+        
+        /* 유닛 버튼 (v4 스타일 복구) */
+        .unit-deck { display: flex; justify-content: space-between; gap: 3px; height: 75px; }
+        .unit-card {
+            flex: 1; background: #34495e; border: 2px solid #7f8c8d; border-radius: 5px;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            cursor: pointer; position: relative;
+        }
+        .unit-card:active { transform: scale(0.95); }
+        .unit-card:disabled { background: #222; border-color: #444; color: #666; cursor: not-allowed; filter: grayscale(100%); }
+        
+        /* 버튼 개별 색상 */
+        #btn-shield { border-color: #27ae60; background: #1e8449; } /* 방패병: 초록 */
+        #btn-hero { border-color: #f1c40f; background: #2c3e50; } /* 영웅: 골드 테두리 */
+        #btn-hero .unit-name { color: #f1c40f; }
+
+        .unit-name { font-weight: bold; margin-bottom: 2px; font-size: 12px; white-space: nowrap; }
+        .unit-cost { color: #f1c40f; font-size: 11px; }
+        
+        /* 스킬 버튼 */
+        #skill-btn {
+            flex: 1.2; background: #222; border: 2px solid #555; border-radius: 5px;
+            margin-left: 5px; cursor: not-allowed; display: flex; flex-direction: column; justify-content: center; align-items: center;
+            position: relative; overflow: hidden;
+        }
+        #skill-btn.ready { background: #c0392b; border-color: #e74c3c; cursor: pointer; animation: pulse 1s infinite; }
+        #skill-progress {
+            position: absolute; bottom: 0; left: 0; height: 100%; width: 100%; background: rgba(0,0,0,0.8);
+            transition: height 0.2s linear;
+        }
+        #skill-text { position: relative; z-index: 2; font-weight: bold; font-size: 12px; line-height: 1.2; }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.02); } 100% { transform: scale(1); } }
+
+        /* 메시지 */
+        #game-msg {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            font-size: 40px; font-family: 'Black Han Sans', sans-serif;
+            color: #fff; text-shadow: 0 0 10px #000, 0 0 20px #e74c3c;
+            display: none; z-index: 100; pointer-events: none; text-align: center; width: 100%;
+        }
+        #boss-warning {
+            position: absolute; top: 20%; left: 50%; transform: translate(-50%, -50%);
+            font-size: 24px; color: #e74c3c; font-weight: bold; text-shadow: 2px 2px 0 #000;
+            display: none; z-index: 50; animation: blink 0.5s infinite alternate; width: 100%;
+        }
+        @keyframes blink { from { opacity: 1; } to { opacity: 0.2; } }
+
+    </style>
+</head>
+<body>
+
+    <div id="rotate-msg">🔄 화면을 가로로 돌려주세요</div>
+
+    <h1>⚔️ 임진왜란 디펜스 ⚔️</h1>
+
+    <div id="game-wrapper">
+        <canvas id="gameCanvas" width="1000" height="400"></canvas>
+        
+        <div id="timer-box">00:00</div>
+        <div id="boss-warning">⚠️ 적장 와키자카 등장! ⚠️</div>
+
+        <div class="hp-bar-container" id="korea-hp-con"><div class="hp-bar" id="korea-hp"></div></div>
+        <div class="base-label" style="left: 10px; color: #3498db;">🟦 조선</div>
+
+        <div class="hp-bar-container" id="japan-hp-con"><div class="hp-bar" id="japan-hp"></div></div>
+        <div class="base-label" style="right: 10px; color: #e74c3c;">🟥 왜군</div>
+
+        <div id="game-msg">승리!</div>
+    </div>
+
+    <div id="control-panel">
+        <div class="top-info">
+            <div class="mode-select">
+                <button class="mode-btn" id="btn-fantasy" style="background:#2980b9; color:white;" onclick="changeMode('fantasy')">📖 임진록</button>
+                <button class="mode-btn" id="btn-real" style="background:#c0392b; color:white;" onclick="changeMode('real')">🩸 임진왜란</button>
+            </div>
+            <div class="resource">
+                군자금: <span id="money">0</span> 
+                <span class="pop-count">👥 <span id="pop-val">0</span>/12</span>
+            </div>
+        </div>
+
+        <div class="unit-deck">
+            <button class="unit-card" onclick="spawnUnit('shield')" id="btn-shield">
+                <span class="unit-name">🛡️방패</span><span class="unit-cost">60</span>
+            </button>
+            <button class="unit-card" onclick="spawnUnit('spear')" id="btn-u1">
+                <span class="unit-name">⚔️창병</span><span class="unit-cost" id="cost-spear">50</span>
+            </button>
+            <button class="unit-card" onclick="spawnUnit('archer')" id="btn-u2">
+                <span class="unit-name">🏹궁병</span><span class="unit-cost" id="cost-archer">80</span>
+            </button>
+            <button class="unit-card" onclick="spawnUnit('cavalry')" id="btn-u3">
+                <span class="unit-name">🐎기마</span><span class="unit-cost" id="cost-cavalry">150</span>
+            </button>
+            <button class="unit-card" onclick="spawnUnit('singijeon')" id="btn-u4" style="border-color: #9b59b6;">
+                <span class="unit-name" style="color:#d2b4de;">🚀신기전</span><span class="unit-cost" id="cost-singijeon">300</span>
+            </button>
+            <button class="unit-card" onclick="spawnHero()" id="btn-hero">
+                <span class="unit-name">⭐이순신</span><span class="unit-cost" id="cost-hero">1000</span>
+            </button>
+
+            <div id="skill-btn" onclick="useSkill()">
+                <div id="skill-progress"></div>
+                <div id="skill-text">대장군전<br><span style="font-size:10px;">(터치)</span></div>
+            </div>
+        </div>
+    </div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // 시스템 변수
+    let gameLoopId;
+    let money = 0;
+    let frame = 0;
+    let seconds = 0;
+    let isGameOver = false;
+    let currentMode = 'fantasy'; 
+    
+    let koreaHp = 3000;
+    let japanHp = 3000;
+    const MAX_HP = 3000;
+    const MAX_POPULATION = 12; // 인구수 제한 (요청사항)
+
+    let units = [];
+    let particles = [];
+    let isHeroAlive = false;
+    let isBossSpawned = false;
+
+    let skillCooldownMax = 40; 
+    let skillTimer = 0; 
+    let isSkillReady = false;
+
+    const KILL_REWARD = 20;
+
+    // 밸런스 데이터 (방패병 속도 상향, 적군 너프)
+    const BALANCE = {
+        fantasy: {
+            moneyRate: 3.0, spawnRate: 0.008, bossTime: 60, heroCost: 1000,
+            korea: {
+                spear: { hp: 200, dmg: 25, range: 40, speed: 1.5, cost: 50, color: '#3498db', name:'창' },
+                archer: { hp: 100, dmg: 20, range: 250, speed: 1.2, cost: 80, color: '#2980b9', name:'궁' },
+                cavalry: { hp: 400, dmg: 50, range: 40, speed: 3.0, cost: 150, color: '#f1c40f', name:'기마' },
+                singijeon: { hp: 150, dmg: 150, range: 350, speed: 0.8, cost: 300, reload: 120, type:'aoe', color:'#9b59b6', name:'신기전' },
+                hero: { hp: 3000, dmg: 300, range: 60, speed: 1.5, cost: 1000, color: '#f39c12', name:'이순신', type:'aoe' },
+                // 방패병 속도 1.5 (궁병 1.2보다 빠름)
+                shield: { hp: 600, dmg: 10, range: 30, speed: 1.5, cost: 60, color: '#27ae60', name:'방패' } 
+            },
+            japan: {
+                spear: { hp: 80, dmg: 10, range: 40, speed: 1.0, color: '#e74c3c', name:'창' },
+                archer: { hp: 50, dmg: 5, range: 200, speed: 1.0, color: '#c0392b', name:'궁' },
+                musket: { hp: 50, dmg: 10, range: 200, speed: 0.8, reload: 150, color: '#2c3e50', name:'조총' },
+                cavalry: { hp: 150, dmg: 20, range: 40, speed: 2.0, color: '#e67e22', name:'기마' },
+                boss: { hp: 4000, dmg: 150, range: 50, speed: 1.2, color: '#8e44ad', name:'와키자카', type:'aoe' }
+            }
+        },
+        real: {
+            moneyRate: 1.5, spawnRate: 0.012, bossTime: 40, heroCost: 1200, // spawnRate 약간 낮춤
+            korea: {
+                spear: { hp: 100, dmg: 15, range: 30, speed: 1.0, cost: 60, color: '#3498db', name:'창' },
+                archer: { hp: 80, dmg: 10, range: 180, speed: 1.0, cost: 90, color: '#2980b9', name:'궁' },
+                cavalry: { hp: 200, dmg: 30, range: 30, speed: 1.8, cost: 200, color: '#f1c40f', name:'기마' },
+                singijeon: { hp: 80, dmg: 60, range: 250, speed: 0.5, cost: 500, reload: 250, type:'aoe', color:'#9b59b6', name:'신기전' },
+                hero: { hp: 3000, dmg: 200, range: 60, speed: 1.2, cost: 1200, color: '#f39c12', name:'이순신', type:'aoe' },
+                // 방패병 속도 1.3 (궁병 1.0보다 빠름)
+                shield: { hp: 500, dmg: 5, range: 30, speed: 1.3, cost: 60, color: '#27ae60', name:'방패' } 
+            },
+            japan: {
+                spear: { hp: 150, dmg: 10, range: 45, speed: 1.2, color: '#e74c3c', name:'창' }, // 데미지 너프
+                archer: { hp: 90, dmg: 6, range: 200, speed: 1.2, color: '#c0392b', name:'궁' }, // 데미지 너프
+                musket: { hp: 80, dmg: 15, range: 320, speed: 0.9, reload: 140, color: '#2c3e50', name:'조총' }, // 데미지 대폭 너프 (20->15)
+                cavalry: { hp: 250, dmg: 20, range: 40, speed: 2.5, color: '#e67e22', name:'기마' },
+                boss: { hp: 5000, dmg: 70, range: 50, speed: 1.3, color: '#8e44ad', name:'와키자카', type:'aoe' } // 보스 데미지 너프
+            }
+        }
+    };
+
+    class Unit {
+        constructor(type, team) {
+            this.type = type;
+            this.team = team;
+            this.x = team === 'korea' ? 50 : 950;
+            this.y = 300 + (Math.random() * 80 - 40);
+            
+            let statData;
+            if (type === 'boss') statData = BALANCE[currentMode].japan.boss;
+            else if (type === 'hero') statData = BALANCE[currentMode].korea.hero;
+            else statData = BALANCE[currentMode][team][type];
+
+            this.hp = statData.hp;
+            this.maxHp = statData.hp;
+            this.dmg = statData.dmg;
+            this.range = statData.range;
+            this.speed = statData.speed;
+            this.color = statData.color;
+            this.name = statData.name;
+            this.reloadMax = statData.reload || 60;
+            this.reload = 0;
+            this.isAoe = statData.type === 'aoe';
+            this.isDead = false;
+            this.scale = (type === 'hero' || type === 'boss') ? 1.5 : 1.0;
+        }
+
+        update() {
+            if (this.isDead) return;
+
+            let target = null;
+            let minInfo = Infinity;
+
+            for(let u of units) {
+                if (u.team !== this.team && !u.isDead) {
+                    let dist = Math.abs(u.x - this.x);
+                    if (dist < minInfo) {
+                        minInfo = dist;
+                        target = u;
+                    }
+                }
+            }
+
+            let baseDist = this.team === 'korea' ? (950 - this.x) : (this.x - 50);
+            if (baseDist < minInfo) {
+                minInfo = baseDist;
+                target = 'base';
+            }
+
+            if (minInfo <= this.range) {
+                if (this.reload <= 0) {
+                    this.attack(target);
+                    this.reload = this.reloadMax;
+                } else {
+                    this.reload--;
+                }
+            } else {
+                if (this.team === 'korea') this.x += this.speed;
+                else this.x -= this.speed;
+            }
+        }
+
+        attack(target) {
+            if (this.type !== 'musket') createParticle(this.x + (this.team==='korea'?10:-10), this.y - 20, 'hit');
+            else createParticle(this.x, this.y - 20, 'smoke');
+
+            if (target === 'base') {
+                if (this.team === 'korea') japanHp -= this.dmg;
+                else koreaHp -= this.dmg;
+                createParticle(this.team==='korea'?950:50, 300, 'hit');
+            } else {
+                if (this.isAoe) {
+                    createParticle(target.x, target.y, 'explosion');
+                    units.forEach(u => {
+                        if (u.team !== this.team && Math.abs(u.x - target.x) < 70 && !u.isDead) {
+                            u.takeDamage(this.dmg);
+                        }
+                    });
+                } else {
+                    target.takeDamage(this.dmg);
+                }
+            }
+        }
+
+        takeDamage(amount) {
+            this.hp -= amount;
+            createParticle(this.x, this.y - 40, 'text', '-' + Math.floor(amount));
+            
+            if (this.hp <= 0) {
+                this.isDead = true;
+                createParticle(this.x, this.y, 'dead');
+                if (this.type === 'hero') isHeroAlive = false;
+                if (this.team === 'japan') {
+                    money += KILL_REWARD;
+                    createParticle(this.x, this.y - 60, 'money', `+${KILL_REWARD}`);
+                    document.getElementById('money').innerText = Math.floor(money);
+                }
+            }
+        }
+
+        draw() {
+            if (this.isDead) return;
+            ctx.save();
+            
+            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            ctx.beginPath();
+            ctx.ellipse(this.x, this.y, 10 * this.scale, 5 * this.scale, 0, 0, Math.PI*2);
+            ctx.fill();
+
+            ctx.fillStyle = this.color;
+            let w = 20 * this.scale;
+            let h = 40 * this.scale;
+            ctx.fillRect(this.x - w/2, this.y - h + 10, w, h);
+
+            if (this.type === 'shield') {
+                ctx.fillStyle = '#145a32';
+                ctx.fillRect(this.x + (this.team==='korea'?5:-15), this.y - 30, 10, 30);
+            }
+
+            ctx.fillStyle = '#fff';
+            ctx.font = (this.scale > 1 ? 'bold 14px' : '11px') + ' Noto Sans KR';
+            if(this.type==='hero' || this.type==='boss') ctx.fillStyle = '#f1c40f';
+            ctx.textAlign = 'center';
+            ctx.fillText(this.name, this.x, this.y - h);
+
+            let hpPct = Math.max(0, this.hp / this.maxHp);
+            ctx.fillStyle = '#333';
+            ctx.fillRect(this.x - 15, this.y - h - 15, 30, 5);
+            ctx.fillStyle = hpPct > 0.5 ? '#2ecc71' : '#e74c3c';
+            ctx.fillRect(this.x - 15, this.y - h - 15, 30 * hpPct, 5);
+            ctx.restore();
+        }
+    }
+
+    function createParticle(x, y, type, val) {
+        particles.push({ x, y, type, val, life: 40 });
+    }
+
+    function drawParticles() {
+        for (let i = particles.length - 1; i >= 0; i--) {
+            let p = particles[i];
+            p.life--;
+            
+            if (p.type === 'text') {
+                ctx.fillStyle = '#fff'; ctx.font = 'bold 14px Arial'; ctx.fillText(p.val, p.x, p.y); p.y--;
+            } else if (p.type === 'money') {
+                ctx.fillStyle = '#f1c40f'; ctx.font = 'bold 18px Arial'; ctx.fillText(p.val, p.x, p.y); p.y-=2;
+            } else if (p.type === 'explosion') {
+                ctx.beginPath(); ctx.arc(p.x, p.y, 40 - p.life, 0, Math.PI*2);
+                ctx.fillStyle = `rgba(231, 76, 60, ${p.life/40})`; ctx.fill();
+            } else if (p.type === 'smoke') {
+                ctx.beginPath(); ctx.arc(p.x + (30-p.life), p.y - 10, 5, 0, Math.PI*2);
+                ctx.fillStyle = `rgba(200, 200, 200, ${p.life/40})`; ctx.fill();
+            } else if (p.type === 'dead') {
+                ctx.fillStyle = '#555'; ctx.fillRect(p.x - 10, p.y, 20, 5);
+            } else if (p.type === 'hit') {
+                ctx.fillStyle = '#fff'; ctx.fillRect(p.x, p.y, 4, 4);
+            } else if (p.type === 'arrow') {
+                ctx.fillStyle = 'yellow'; ctx.fillRect(p.x, p.y, 100, 10);
+                ctx.fillStyle = 'white'; ctx.fillText("대장군전!", p.x, p.y - 20); p.x += 30;
+            }
+
+            if (p.life <= 0) particles.splice(i, 1);
+        }
+    }
+
+    function getPopulation(team) {
+        return units.filter(u => u.team === team && !u.isDead).length;
+    }
+
+    function gameLoop() {
+        if (isGameOver) return;
+        
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        frame++;
+        
+        if (frame % 60 === 0) {
+            seconds++;
+            skillTimer++;
+            updateTimer();
+            updateSkillBtn();
+            checkBossSpawn();
+        }
+        if (frame % 5 === 0) { 
+            money += BALANCE[currentMode].moneyRate;
+            document.getElementById('money').innerText = Math.floor(money);
+        }
+
+        // 적군 스폰 (인구 제한 적용)
+        let japanPop = getPopulation('japan');
+        if (japanPop < MAX_POPULATION && Math.random() < BALANCE[currentMode].spawnRate) {
+            const types = ['spear', 'archer', 'musket', 'cavalry'];
+            let r = Math.floor(Math.random() * 4);
+            if (currentMode === 'real' && Math.random() < 0.3) r = 2; 
+            units.push(new Unit(types[r], 'japan'));
+        }
+
+        units.sort((a, b) => a.y - b.y); 
+        for (let i = units.length - 1; i >= 0; i--) {
+            let u = units[i];
+            u.update();
+            u.draw();
+            if (u.isDead && Math.random() < 0.05) units.splice(i, 1);
+        }
+
+        drawParticles();
+        updateUI();
+        checkGameOver();
+
+        gameLoopId = requestAnimationFrame(gameLoop);
+    }
+
+    function updateTimer() {
+        let m = Math.floor(seconds / 60).toString().padStart(2, '0');
+        let s = (seconds % 60).toString().padStart(2, '0');
+        document.getElementById('timer-box').innerText = `${m}:${s}`;
+    }
+
+    function updateSkillBtn() {
+        let pct = Math.min(100, (skillTimer / skillCooldownMax) * 100);
+        document.getElementById('skill-progress').style.height = (100 - pct) + '%';
+        
+        if (skillTimer >= skillCooldownMax) {
+            isSkillReady = true;
+            document.getElementById('skill-btn').classList.add('ready');
+            document.getElementById('skill-text').innerHTML = "발사 가능!<br>(터치)";
+        } else {
+            isSkillReady = false;
+            document.getElementById('skill-btn').classList.remove('ready');
+            document.getElementById('skill-text').innerHTML = `${skillCooldownMax - skillTimer}초`;
+        }
+    }
+
+    function useSkill() {
+        if (!isSkillReady || isGameOver) return;
+        
+        isSkillReady = false;
+        skillTimer = 0;
+        updateSkillBtn();
+        
+        createParticle(50, 200, 'arrow', "대장군전");
+        
+        units.forEach(u => {
+            if (u.team === 'japan' && !u.isDead) {
+                u.takeDamage(2000); 
+                createParticle(u.x, u.y, 'explosion');
+            }
+        });
+    }
+
+    function checkBossSpawn() {
+        if (!isBossSpawned && seconds === BALANCE[currentMode].bossTime) {
+            isBossSpawned = true;
+            let boss = new Unit('boss', 'japan');
+            units.push(boss);
+            let warning = document.getElementById('boss-warning');
+            warning.style.display = 'block';
+            setTimeout(() => { warning.style.display = 'none'; }, 3000);
+        }
+    }
+
+    function updateUI() {
+        document.getElementById('korea-hp').style.width = Math.max(0, (koreaHp / MAX_HP * 100)) + '%';
+        document.getElementById('japan-hp').style.width = Math.max(0, (japanHp / MAX_HP * 100)) + '%';
+        
+        // 인구수 UI
+        let curPop = getPopulation('korea');
+        let popVal = document.getElementById('pop-val');
+        popVal.innerText = curPop;
+        popVal.style.color = curPop >= MAX_POPULATION ? '#e74c3c' : '#fff';
+
+        // 버튼 활성 상태 (돈 + 인구수 체크)
+        const costs = BALANCE[currentMode].korea;
+        const checkBtn = (btnId, cost) => {
+            let btn = document.getElementById(btnId);
+            let affordable = money >= cost;
+            let popOk = curPop < MAX_POPULATION;
+            btn.disabled = !affordable || !popOk;
+            // 인구 꽉 찼으면 반투명, 돈 없으면 회색조(CSS filter)
+            btn.style.opacity = popOk ? (affordable ? 1 : 1) : 0.5; 
+        };
+
+        checkBtn('btn-shield', 60); // 방패병 60원 고정
+        checkBtn('btn-u1', costs.spear.cost);
+        checkBtn('btn-u2', costs.archer.cost);
+        checkBtn('btn-u3', costs.cavalry.cost);
+        checkBtn('btn-u4', costs.singijeon.cost);
+        
+        let heroCost = BALANCE[currentMode].heroCost;
+        let heroBtn = document.getElementById('btn-hero');
+        let heroOk = (money >= heroCost) && !isHeroAlive && (curPop < MAX_POPULATION);
+        heroBtn.disabled = !heroOk;
+        heroBtn.style.opacity = heroOk ? 1 : (curPop >= MAX_POPULATION ? 0.5 : 1);
+        document.getElementById('cost-hero').innerText = heroCost;
+    }
+
+    function checkGameOver() {
+        if (koreaHp <= 0 || japanHp <= 0) {
+            isGameOver = true;
+            cancelAnimationFrame(gameLoopId);
+            const msg = document.getElementById('game-msg');
+            msg.style.display = 'block';
+            
+            if (koreaHp <= 0) {
+                msg.innerText = "패배...";
+                msg.style.color = "#e74c3c";
+            } else {
+                msg.innerText = "승리!!";
+                msg.style.color = "#3498db";
+            }
+        }
+    }
+
+    function spawnUnit(type) {
+        if (isGameOver) return;
+        // 인구수 제한 체크
+        if (getPopulation('korea') >= MAX_POPULATION) return;
+
+        const cost = BALANCE[currentMode].korea[type].cost;
+        if (money >= cost) {
+            money -= cost;
+            units.push(new Unit(type, 'korea'));
+        }
+    }
+
+    function spawnHero() {
+        if (isGameOver || isHeroAlive) return;
+        if (getPopulation('korea') >= MAX_POPULATION) return;
+
+        let cost = BALANCE[currentMode].heroCost;
+        if (money >= cost) {
+            money -= cost;
+            isHeroAlive = true;
+            units.push(new Unit('hero', 'korea'));
+            createParticle(100, 300, 'text', "이순신 장군 출격!");
+        }
+    }
+
+    function changeMode(mode) {
+        currentMode = mode;
+        document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById(mode === 'fantasy' ? 'btn-fantasy' : 'btn-real').classList.add('active');
+        
+        const kUnits = BALANCE[mode].korea;
+        document.getElementById('cost-spear').innerText = kUnits.spear.cost;
+        document.getElementById('cost-archer').innerText = kUnits.archer.cost;
+        document.getElementById('cost-cavalry').innerText = kUnits.cavalry.cost;
+        document.getElementById('cost-singijeon').innerText = kUnits.singijeon.cost;
+        document.getElementById('cost-hero').innerText = BALANCE[mode].heroCost;
+
+        resetGame();
+    }
+
+    function resetGame() {
+        cancelAnimationFrame(gameLoopId);
+        money = 500; 
+        koreaHp = MAX_HP;
+        japanHp = MAX_HP;
+        units = [];
+        particles = [];
+        isGameOver = false;
+        isHeroAlive = false;
+        isBossSpawned = false;
+        frame = 0;
+        seconds = 0;
+        skillTimer = 0;
+        updateSkillBtn();
+        document.getElementById('timer-box').innerText = "00:00";
+        document.getElementById('game-msg').style.display = 'none';
+        document.getElementById('boss-warning').style.display = 'none';
+        
+        gameLoop();
+    }
+
+    // 초기화
+    changeMode('fantasy');
+
+</script>
+</body>
+</html>
